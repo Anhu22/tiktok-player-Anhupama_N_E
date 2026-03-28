@@ -3,6 +3,8 @@ import VideoPlayer from './components/VideoPlayer';
 import ActionBar from './components/ActionBar';
 import UserInfo from './components/UserInfo';
 import MusicDisc from './components/MusicDisc';
+import SettingsButton from './components/SettingsButton';
+import SettingsMenu from './components/Settings';
 
 const videos = [
   {
@@ -165,6 +167,9 @@ function App() {
   const [bookmarkStates, setBookmarkStates] = useState({});
   const [followStates, setFollowStates] = useState({});
   const [isScrolling, setIsScrolling] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsPosition, setSettingsPosition] = useState({ top: 80, left: 20 });
   const scrollContainerRef = useRef(null);
   const scrollTimeoutRef = useRef(null);
 
@@ -185,6 +190,26 @@ function App() {
     setBookmarkStates(initialBookmarks);
     setFollowStates(initialFollow);
   }, []);
+
+  // Dark mode effect
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  const handleDarkModeToggle = () => {
+    setDarkMode(!darkMode);
+  };
+
+  const handleSettingsToggle = (position) => {
+    if (position) {
+      setSettingsPosition(position);
+    }
+    setShowSettings(!showSettings);
+  };
 
   // Handle scroll with proper snapping and delay to ensure smooth playback
   const handleScroll = useCallback(() => {
@@ -334,6 +359,14 @@ function App() {
               isLiked={likedStates[video.id] || false}
             />
             
+            {/* Settings Button - Only show on active video */}
+            {index === currentIndex && (
+              <SettingsButton 
+                onClick={handleSettingsToggle} 
+                darkMode={darkMode}
+              />
+            )}
+            
             <ActionBar
               video={{
                 ...video,
@@ -368,6 +401,15 @@ function App() {
           </div>
         ))}
       </div>
+      
+      {/* Settings Menu */}
+      <SettingsMenu
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        darkMode={darkMode}
+        onDarkModeToggle={handleDarkModeToggle}
+        position={settingsPosition}
+      />
     </div>
   );
 }

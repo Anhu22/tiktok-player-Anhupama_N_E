@@ -116,3 +116,19 @@ html, body, #root {
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* Dark mode styles */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #000000;
+}
+
+/* Custom dark mode transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}

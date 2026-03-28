@@ -5,7 +5,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(false); // Start unmuted, user controls muting
   const [isLoading, setIsLoading] = useState(true);
   const [showOverlay, setShowOverlay] = useState(false); // Changed from showControls
   const [duration, setDuration] = useState(0);
@@ -41,8 +41,8 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
             setIsLoading(false);
           } else {
             // Wait for video to load
-            video.addEventListener('canplay', () => {
-              video.play();
+            video.addEventListener('canplay', async () => {
+              await video.play();
               setIsPlaying(true);
               setIsLoading(false);
             }, { once: true });
@@ -222,12 +222,37 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
     togglePlay(); // Toggle play/pause
   }, [togglePlay, isDoubleTap, isLongPress]);
 
+  // Double tap ONLY triggers like animation - KEEPS VIDEO PLAYING
+  const handleDoubleTap = useCallback((e) => {
+    e.stopPropagation();
+    
+    // Set flag to prevent play/pause overlay
+    setIsDoubleTap(true);
+    setTimeout(() => setIsDoubleTap(false), 300);
+    
+    // Show heart animation on double tap
+    setShowHeartAnimation(true);
+    setTimeout(() => setShowHeartAnimation(false), 1000);
+    
+    // Only update like count if heart is not already red (not already liked)
+    if (!isLiked) {
+      onLike && onLike(true);
+    }
+    
+    // Ensure video keeps playing after double tap
+    const video = videoRef.current;
+    if (video && video.paused) {
+      video.play().catch(e => console.log('Play after double tap failed:', e));
+      setIsPlaying(true);
+    }
+  }, [onLike, isLiked]);
+
   const handleMouseDown = useCallback((e) => {
     e.preventDefault();
     setIsLongPress(false);
     setWasPlayingBeforePress(isPlaying);
     
-    longPressTimer = setTimeout(() => {
+    longPressTimer.current = setTimeout(() => {
       setIsLongPress(true);
       if (isPlaying) {
         videoRef.current?.pause();
@@ -327,7 +352,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
         src={video.url}
         className={`absolute inset-0 w-full h-full object-cover ${darkMode ? 'brightness-75' : 'brightness-100'}`}
         loop={false}
-        muted={isMuted}
+        muted={isMuted} // Use dynamic mute state controlled by user
         playsInline
         preload="auto"
         data-id={video.id}
@@ -401,11 +426,11 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
                 <div className={`absolute bottom-6 left-3 w-20 h-3 ${darkMode ? 'bg-gray-700/40' : 'bg-gray-700/40'} rounded-full animate-pulse`}></div>
               </div>
             </div>
-            
-            {/* Loading Text */}
-            <div className="absolute bottom-12 left-0 right-0 text-center">
-              <div className={`text-sm font-medium animate-pulse ${darkMode ? 'text-white/50' : 'text-white/50'}`}>Buffering video...</div>
-            </div>
+          </div>
+          
+          {/* Loading Text */}
+          <div className="absolute bottom-12 left-0 right-0 text-center">
+            <div className={`text-sm font-medium animate-pulse ${darkMode ? 'text-white/50' : 'text-white/50'}`}>Buffering video...</div>
           </div>
         </div>
       )}
@@ -473,7 +498,6 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
         </div>
       </div>
     </div>
-  
   );
 };
 

@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark } from 'lucide-react';
 
-const ActionBar = ({ video, videoId, onLike, onComment, onShare, onBookmark, isBookmarked: initialBookmarked }) => {
-  const [liked, setLiked] = useState(false);
+const ActionBar = ({ video, videoId, onLike, onComment, onShare, onBookmark, isBookmarked: initialBookmarked, isLiked: initialLiked }) => {
+  const [liked, setLiked] = useState(initialLiked || false);
   const [bookmarked, setBookmarked] = useState(initialBookmarked || false);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
-  const [likesCount, setLikesCount] = useState(video.likes);
+
+  // Sync liked state with prop changes
+  useEffect(() => {
+    setLiked(initialLiked || false);
+  }, [initialLiked]);
 
   const handleLike = (e) => {
     e.stopPropagation(); // Prevent event from bubbling to video player
     
     if (!liked) {
-      setLikesCount(prev => prev + 1);
       setShowHeartAnimation(true);
       setTimeout(() => setShowHeartAnimation(false), 1000);
-    } else {
-      setLikesCount(prev => prev - 1);
     }
     setLiked(!liked);
     onLike && onLike(!liked);
@@ -52,7 +53,7 @@ const ActionBar = ({ video, videoId, onLike, onComment, onShare, onBookmark, isB
             className={`transition-all ${liked ? 'fill-red-500 text-red-500' : 'text-white'}`}
           />
         </button>
-        <span className="text-white text-xs mt-1 font-medium">{likesCount.toLocaleString()}</span>
+        <span className="text-white text-xs mt-1 font-medium">{video.likes.toLocaleString()}</span>
         
         {/* Heart Animation */}
         {showHeartAnimation && (

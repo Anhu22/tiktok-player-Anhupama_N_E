@@ -26,9 +26,11 @@ const UserInfo = ({ video, onFollow }) => {
   return (
     <div className="absolute bottom-0 left-0 right-0 z-10">
       {/* Main Container - Placed directly above progress bar with minimal gap */}
-      <div className="px-4 pb-2">
-        {/* Combined User Info Card */}
-        <div className="flex items-start gap-3">
+      <div className="px-4 pb-5">
+        {/* Invisible Container - only for structural guidance to prevent text overflow */}
+        <div className="mr-20">
+          {/* Combined User Info Card */}
+          <div className="flex items-start gap-3">
           {/* Avatar - Option 3 style with online indicator */}
           <div className="relative flex-shrink-0">
             <img
@@ -87,6 +89,7 @@ const UserInfo = ({ video, onFollow }) => {
             </div>
           </div>
         </div>
+        </div> {/* Closing transparent container */}
       </div>
     </div>
   );

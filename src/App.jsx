@@ -262,6 +262,7 @@ function App() {
         case ' ':
         case 'Space':
           e.preventDefault();
+          // Temporarily disabled keyboard play/pause
           const activeVideo = document.querySelector(`video[data-id="${activeVideoId}"]`);
           if (activeVideo) {
             if (activeVideo.paused) {
@@ -330,6 +331,7 @@ function App() {
               onPlay={() => console.log(`Video ${video.id} playing`)}
               onPause={() => console.log(`Video ${video.id} paused`)}
               onLike={(liked) => handleLike(video.id, liked)}
+              isLiked={likedStates[video.id] || false}
             />
             
             <ActionBar

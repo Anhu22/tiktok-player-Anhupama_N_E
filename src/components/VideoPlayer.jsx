@@ -1,22 +1,24 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
-const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
+const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [showControls, setShowControls] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false); // Changed from showControls
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
   const [isSeeking, setIsSeeking] = useState(false);
   const [showHeartAnimation, setShowHeartAnimation] = useState(false);
   const [hasResetForThisSession, setHasResetForThisSession] = useState(false);
-  let controlsTimeout;
+  const [isDoubleTap, setIsDoubleTap] = useState(false);
+  const lastTapTime = useRef(0);
+  let overlayTimeout;
   let longPressTimer;
 
-  // Handle video activation/deactivation - RESET ONLY ON ACTUAL VIDEO CHANGE
+  // Handle video activation/deactivation - RESTART FROM BEGINNING
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -52,7 +54,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
             video.addEventListener('canplay', canPlayHandler);
           }
         } else {
-          // When video becomes inactive, pause but DON'T reset the currentTime
+          // When video becomes inactive, pause
           if (!video.paused) {
             video.pause();
             setIsPlaying(false);
@@ -78,6 +80,15 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
   useEffect(() => {
     setHasResetForThisSession(false);
   }, [video.id]);
+
+  // FIXED: Show overlay for exactly 1 second, then hide
+  const showOverlayTemporarily = () => {
+    setShowOverlay(true);
+    clearTimeout(overlayTimeout);
+    overlayTimeout = setTimeout(() => {
+      setShowOverlay(false);
+    }, 1000); // Exactly 1 second
+  };
 
   // Update progress and buffer
   useEffect(() => {
@@ -155,7 +166,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
 
   // Seek functionality
   const handleSeek = useCallback((e) => {
-    e.stopPropagation(); // Prevent event from bubbling
+    e.stopPropagation();
     const video = videoRef.current;
     if (!video || !duration) return;
 
@@ -193,61 +204,63 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
           setIsPlaying(false);
         });
     }
-    showControlsTemporarily();
+    showOverlayTemporarily(); // Show overlay for 1 second
   }, [isPlaying]);
 
-  // FIXED: Mute toggle that does NOT affect playback
   const toggleMute = useCallback((e) => {
     if (e) {
-      e.stopPropagation(); // Stop event from bubbling
-      e.preventDefault();   // Prevent any default behavior
+      e.stopPropagation();
+      e.preventDefault();
     }
     
     const video = videoRef.current;
     if (!video) return;
 
-    // Toggle mute state
     const newMutedState = !isMuted;
     video.muted = newMutedState;
     setIsMuted(newMutedState);
-    
-    // IMPORTANT: Do NOT affect play state - video continues playing
-    // No pause, no play toggle, just mute/unmute
   }, [isMuted]);
 
-  const showControlsTemporarily = () => {
-    setShowControls(true);
-    clearTimeout(controlsTimeout);
-    controlsTimeout = setTimeout(() => {
-      setShowControls(false);
-    }, 1000);
-  };
-
   const handleTap = useCallback(() => {
-    showControlsTemporarily();
-    togglePlay();
-  }, [togglePlay]);
+    // Don't show overlay if it was a double tap
+    if (isDoubleTap) {
+      setIsDoubleTap(false);
+      return;
+    }
+    showOverlayTemporarily(); // Show overlay for 1 second
+    togglePlay(); // Toggle play/pause
+  }, [togglePlay, isDoubleTap]);
 
-  // Double tap ONLY triggers like animation - NO pause, NO reset
+  // Double tap ONLY triggers like animation
   const handleDoubleTap = useCallback((e) => {
     e.stopPropagation();
+    
+    // Set flag to prevent play/pause overlay
+    setIsDoubleTap(true);
+    setTimeout(() => setIsDoubleTap(false), 300);
     
     // Show heart animation on double tap
     setShowHeartAnimation(true);
     setTimeout(() => setShowHeartAnimation(false), 1000);
     
-    // Call the onLike callback to update like count
-    onLike && onLike(true);
+    // Only update like count if heart is not already red (not already liked)
+    if (!isLiked) {
+      onLike && onLike(true);
+    }
     
-    // Video continues playing - NO interruption
-  }, [onLike]);
+    // Clear any pending overlay timeout
+    if (overlayTimeout) {
+      clearTimeout(overlayTimeout);
+      setShowOverlay(false);
+    }
+  }, [onLike, isLiked]);
 
   const handleMouseDown = useCallback(() => {
     longPressTimer = setTimeout(() => {
       if (isPlaying) {
         videoRef.current?.pause();
         setIsPlaying(false);
-        showControlsTemporarily();
+        showOverlayTemporarily();
       }
     }, 500);
   }, [isPlaying]);
@@ -259,15 +272,48 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
     }
   }, []);
 
+  // Mobile touch handlers for double-tap detection
+  const handleTouchStart = useCallback((e) => {
+    longPressTimer = setTimeout(() => {
+      if (isPlaying) {
+        videoRef.current?.pause();
+        setIsPlaying(false);
+        showOverlayTemporarily();
+      }
+    }, 500);
+  }, [isPlaying]);
+
+  const handleTouchEnd = useCallback((e) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+      
+      const currentTime = Date.now();
+      const timeSinceLastTap = currentTime - lastTapTime.current;
+      
+      // Check if this is a double tap (within 300ms)
+      if (timeSinceLastTap < 300) {
+        // Double tap detected
+        e.preventDefault();
+        handleDoubleTap(e);
+      } else if (timeSinceLastTap > 300) {
+        // Single tap detected
+        handleTap();
+      }
+      
+      lastTapTime.current = currentTime;
+    }
+  }, [handleTap, handleDoubleTap]);
+
   return (
     <div 
-      className="relative w-full h-full bg-black cursor-pointer"
+      className="relative w-full h-full bg-black cursor-pointer video-container"
       onClick={handleTap}
       onDoubleClick={handleDoubleTap}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onTouchStart={handleMouseDown}
-      onTouchEnd={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       <video
         ref={videoRef}
@@ -295,7 +341,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
         </div>
       )}
       
-      {/* Loading Skeleton with Shimmer Animation */}
+      {/* Loading Skeleton */}
       {isLoading && (
         <div className="absolute inset-0 bg-gradient-to-r from-gray-800 via-gray-700 to-gray-800">
           <div className="absolute inset-0 shimmer" 
@@ -307,32 +353,65 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
         </div>
       )}
       
-      {/* Sophisticated Play/Pause Overlay Animation */}
-      {(showControls || !isPlaying) && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 backdrop-blur-sm transition-all duration-300 animate-fadeIn">
-          <div className="relative">
-            {/* Ripple Effect Background */}
-            <div className="absolute inset-0 rounded-full bg-white/20 animate-ping"></div>
-            
-            {/* Main Icon Container */}
-            <div className="relative bg-white/20 backdrop-blur-md rounded-full p-5 transform transition-all duration-300 hover:scale-110 animate-scaleIn">
-              {isPlaying ? (
-                <Pause size={56} className="text-white drop-shadow-lg" />
-              ) : (
-                <Play size={56} className="text-white drop-shadow-lg ml-1" />
-              )}
+      {/* Video Loading Skeleton - Appears when video is not loaded */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="relative w-full h-full flex items-center justify-center">
+            {/* Video Frame Skeleton */}
+            <div className="absolute inset-4 bg-gray-800 rounded-lg overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900">
+                {/* Shimmer Effect */}
+                <div className="absolute inset-0 shimmer" 
+                  style={{
+                    background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent)',
+                    animation: 'shimmer 2s infinite'
+                  }}
+                />
+                
+                {/* Play Button Placeholder */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center animate-pulse">
+                    <div className="w-0 h-0 border-l-[20px] border-l-gray-400 border-y-[12px] border-y-transparent ml-1"></div>
+                  </div>
+                </div>
+                
+                {/* Loading Progress Bar */}
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700">
+                  <div className="h-full w-1/3 bg-blue-500 rounded animate-pulse"></div>
+                </div>
+                
+                {/* Corner Elements */}
+                <div className="absolute top-2 left-2 w-8 h-8 bg-gray-600 rounded animate-pulse"></div>
+                <div className="absolute top-2 right-2 w-8 h-8 bg-gray-600 rounded animate-pulse"></div>
+                <div className="absolute bottom-2 left-2 w-16 h-4 bg-gray-600 rounded animate-pulse"></div>
+              </div>
             </div>
             
-            {/* Outer Ring Pulse */}
-            <div className="absolute inset-0 rounded-full border-2 border-white/30 animate-pulse"></div>
+            {/* Loading Text */}
+            <div className="absolute bottom-8 left-0 right-0 text-center">
+              <div className="text-white/60 text-sm animate-pulse">Loading video...</div>
+            </div>
           </div>
         </div>
       )}
       
-      {/* Mute Button - FIXED: Does not affect playback */}
+      {/* SUBTLE PLAY/PAUSE OVERLAY - Shows for exactly 1 second on tap, then fades out */}
+      {showOverlay && !isDoubleTap && !isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none animate-fadeOut">
+          <div className="bg-black/50 backdrop-blur-sm rounded-full p-4 transition-all duration-300">
+            {isPlaying ? (
+              <Pause size={48} className="text-white/90" />
+            ) : (
+              <Play size={48} className="text-white/90 ml-1" />
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Mute Button */}
       <button
         onClick={toggleMute}
-        onMouseDown={(e) => e.stopPropagation()} // Prevent long press detection
+        onMouseDown={(e) => e.stopPropagation()}
         onMouseUp={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
         onTouchEnd={(e) => e.stopPropagation()}
@@ -345,9 +424,8 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
         )}
       </button>
 
-      {/* Enhanced Progress Bar with Buffer Indicator and Seek Functionality */}
+      {/* Progress Bar */}
       <div className="absolute bottom-0 left-0 right-0 z-20 group">
-        {/* Progress Bar Container */}
         <div 
           className="relative w-full h-1 bg-gray-700 cursor-pointer hover:h-1.5 transition-all duration-200"
           onClick={handleSeek}
@@ -367,7 +445,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike }) => {
             style={{ width: `${progress}%` }}
           />
           
-          {/* Seek Handle - Shows on hover */}
+          {/* Seek Handle */}
           <div 
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
             style={{ left: `${progress}%`, transform: 'translate(-50%, -50%)' }}

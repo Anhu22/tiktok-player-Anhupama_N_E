@@ -5,7 +5,7 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [isMuted, setIsMuted] = useState(true); // Start muted for immediate autoplay
+  const [isMuted, setIsMuted] = useState(false); // Start unmuted by default
   const [isLoading, setIsLoading] = useState(true);
   const [showOverlay, setShowOverlay] = useState(false); // Changed from showControls
   const [duration, setDuration] = useState(0);
@@ -27,6 +27,8 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
 
     const playVideo = async () => {
       try {
+        console.log('playVideo called:', { isActive, videoId: video.id, videoReady: video.readyState, isMuted });
+        
         if (isActive) {
           // Always restart from beginning when video becomes active
           video.currentTime = 0;
@@ -35,19 +37,66 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
           
           setIsLoading(true);
           
+          // Strategy 1: Direct play attempt
           if (video.readyState >= 2) {
-            await video.play();
-            setIsPlaying(true);
-            setIsLoading(false);
-          } else {
-            // Wait for video to load
-            video.addEventListener('canplay', async () => {
+            console.log('Strategy 1: Video ready, attempting direct play');
+            try {
               await video.play();
+              console.log('Strategy 1: Direct play successful');
               setIsPlaying(true);
               setIsLoading(false);
-            }, { once: true });
+              return; // Success, exit early
+            } catch (error) {
+              console.log('Strategy 1 failed:', error.name, error.message);
+            }
           }
+          
+          // Strategy 2: Wait for canplay event
+          console.log('Strategy 2: Video not ready, waiting for canplay event');
+          video.addEventListener('canplay', async () => {
+            console.log('Strategy 2: canplay event fired, attempting play');
+            try {
+              await video.play();
+              console.log('Strategy 2: Play successful after canplay');
+              setIsPlaying(true);
+              setIsLoading(false);
+              return; // Success, exit early
+            } catch (error) {
+              console.log('Strategy 2 failed:', error.name, error.message);
+            }
+          }, { once: true });
+          
+          // Strategy 3: Force play after loadeddata
+          video.addEventListener('loadeddata', async () => {
+            console.log('Strategy 3: loadeddata event fired, attempting play');
+            try {
+              await video.play();
+              console.log('Strategy 3: Play successful after loadeddata');
+              setIsPlaying(true);
+              setIsLoading(false);
+              return; // Success, exit early
+            } catch (error) {
+              console.log('Strategy 3 failed:', error.name, error.message);
+            }
+          }, { once: true });
+          
+          // Strategy 4: Attempt play after delay
+          setTimeout(async () => {
+            if (!isPlaying) {
+              console.log('Strategy 4: Delayed play attempt');
+              try {
+                await video.play();
+                console.log('Strategy 4: Delayed play successful');
+                setIsPlaying(true);
+                setIsLoading(false);
+              } catch (error) {
+                console.log('Strategy 4 failed:', error.name, error.message);
+              }
+            }
+          }, 500);
+          
         } else {
+          console.log('Video not active, pausing');
           // Pause when not active
           if (!video.paused) {
             video.pause();
@@ -62,6 +111,15 @@ const VideoPlayer = ({ video, isActive, onPlay, onPause, onLike, isLiked, darkMo
         setIsLoading(false);
       }
     };
+
+    // Trigger autoplay immediately when video becomes active
+    if (isActive) {
+      console.log('Triggering autoplay with multiple strategies');
+      // Immediate attempt
+      setTimeout(() => {
+        playVideo();
+      }, 50);
+    }
 
     playVideo();
 
